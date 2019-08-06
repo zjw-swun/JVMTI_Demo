@@ -62,6 +62,8 @@ public class JVMTIHelper {
 
     public static native void retransformClasses(Class[] classes);
 
+    public static native long getObjectSize(Object obj);
+
 
     public static void printEnter(String log) {
         Log.d("JVMTIHelper", "_____________________" + log);

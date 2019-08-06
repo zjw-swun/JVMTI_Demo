@@ -217,9 +217,9 @@ void ObjectAllocCallback(jvmtiEnv *jvmti, JNIEnv *jni,
     jclass cls = jni->FindClass("java/lang/Class");
     jmethodID mid_getName = jni->GetMethodID(cls, "getName", "()Ljava/lang/String;");
     jstring name = static_cast<jstring>(jni->CallObjectMethod(klass, mid_getName));
-    const char* className=jni->GetStringUTFChars(name,JNI_FALSE);
-    ALOGI("==========alloc callback======= %s {size:%d}",className,size);
-    jni->ReleaseStringUTFChars(name,className);
+    const char *className = jni->GetStringUTFChars(name, JNI_FALSE);
+    ALOGI("==========alloc callback======= %s {size:%d}", className, size);
+    jni->ReleaseStringUTFChars(name, className);
 }
 
 void GCStartCallback(jvmtiEnv *jvmti) {
@@ -257,17 +257,35 @@ extern "C" JNIEXPORT void JNICALL retransformClasses(JNIEnv *env,
     free(transformedClasses);
 }
 
+extern "C" JNIEXPORT jlong JNICALL getObjectSize(JNIEnv *env, jclass clazz, jobject obj) {
+    jlong size;
+    jvmtiError result = localJvmtiEnv->GetObjectSize(obj, &size);
+    ALOGI("==========getObjectSize %d=======", size);
+    if (result != JVMTI_ERROR_NONE) {
+        char *err;
+        localJvmtiEnv->GetErrorName(result, &err);
+        printf("Failure running GetObjectSize: %s\n", err);
+        localJvmtiEnv->Deallocate(reinterpret_cast<unsigned char *>(err));
+        return -1;
+    }
+    return size;
+}
+
 void JNICALL
-JvmTINativeMethodBind(jvmtiEnv *jvmti_env, JNIEnv *jni_env, jthread thread, jmethodID method,
-                      void *address, void **new_address_ptr) {
+JvmTINativeMethodBind(jvmtiEnv *jvmti_env, JNIEnv *jni_env, jthread thread, jmethodID method, void *address, void **new_address_ptr) {
     ALOGI("===========NativeMethodBind===============");
 
     jclass clazz = jni_env->FindClass("com/dodola/jvmtilib/JVMTIHelper");
-    jmethodID methodid = jni_env->GetStaticMethodID(clazz, "retransformClasses",
-                                                    "([Ljava/lang/Class;)V");
+    jmethodID methodid = jni_env->GetStaticMethodID(clazz, "retransformClasses", "([Ljava/lang/Class;)V");
+    jmethodID methodid2 = jni_env->GetStaticMethodID(clazz, "getObjectSize", "(Ljava/lang/Object;)J");
     if (methodid == method) {
         *new_address_ptr = reinterpret_cast<void *>(&retransformClasses);
     }
+
+    if (methodid2 == method) {
+        *new_address_ptr = reinterpret_cast<jlong *>(&getObjectSize);
+    }
+
     //绑定 package code 到BootClassLoader 里
     jfieldID packageCodePathId = jni_env->GetStaticFieldID(clazz, "packageCodePath",
                                                            "Ljava/lang/String;");
@@ -276,12 +294,11 @@ JvmTINativeMethodBind(jvmtiEnv *jvmti_env, JNIEnv *jni_env, jthread thread, jmet
     const char *pathChar = jni_env->GetStringUTFChars(packageCodePath, JNI_FALSE);
     ALOGI("===========add to boot classloader %s===============", pathChar);
     jvmti_env->AddToBootstrapClassLoaderSearch(pathChar);
-    jni_env->ReleaseStringUTFChars(packageCodePath,pathChar);
+    jni_env->ReleaseStringUTFChars(packageCodePath, pathChar);
 
 }
 
-extern "C" JNIEXPORT jint JNICALL Agent_OnAttach(JavaVM *vm, char *options,
-                                                 void *reserved) {
+extern "C" JNIEXPORT jint JNICALL Agent_OnAttach(JavaVM *vm, char *options, void *reserved) {
     jvmtiEnv *jvmti_env = CreateJvmtiEnv(vm);
 
     if (jvmti_env == nullptr) {
@@ -323,7 +340,15 @@ extern "C" JNIEXPORT void JNICALL tempRetransformClasses(JNIEnv *env,
                                                          jobjectArray classes) {
 }
 
+
+extern "C" JNIEXPORT jlong JNICALL tempGetObjectSize(JNIEnv *env,
+                                                     jclass clazz,
+                                                     jobject obj) {
+}
+
+
 static JNINativeMethod methods[] = {
+        {"getObjectSize",      "(Ljava/lang/Object;)J", reinterpret_cast<jlong *>(tempGetObjectSize)},
         {"retransformClasses", "([Ljava/lang/Class;)V", reinterpret_cast<void *>(tempRetransformClasses)}
 };
 
@@ -334,6 +359,6 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved) {
     }
     ALOGI("==============library load====================");
     jclass clazz = env->FindClass("com/dodola/jvmtilib/JVMTIHelper");
-    env->RegisterNatives(clazz, methods, 1);
+    env->RegisterNatives(clazz, methods, sizeof(methods) / sizeof(methods[0]));
     return JNI_VERSION_1_6;
 }
