@@ -7,6 +7,8 @@ package com.dodola.jvmti;
  * @author : zhoujiawei
  */
 public class Test {
+    //总共就是 8字节对象头 + 4字节 int age  = 12字节
+
     //对象头默认占8字节
 
     int age = 100;

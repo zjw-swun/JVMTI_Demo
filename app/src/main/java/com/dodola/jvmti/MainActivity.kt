@@ -37,6 +37,13 @@ class MainActivity : Activity() {
         getObjectSizeBt.setOnClickListener {
             JVMTIHelper.init(this@MainActivity)
             var obj = Test2()
+            //对象头(8字节 这个可以用unsafe计算偏移量得出) + 基本类型(boolean、byte 占用 1 byte，char、short 占用 2 bytes，int、float 占用 4 bytes，long、double 占用 8 bytes) + 引用类型(占用 4 bytes)
+
+            //计算对象大小 不包括object成员变量实际大小
+            //JVMTIHelper.getObjectSize(obj)
+
+            //深度遍历计算大小 28 = Test2 占字节数（8字节对象头 + 4字节 int age +  4字节Test引用类型占位 = 16字节）  + Test  占字节数（8字节对象头 + 4字节 int age  = 12字节)
+            // 16+12 =28
             val size = fullSizeOf(obj)
             //对象头的大小是8个字节
             getObjectSizeBt.text = "对象大小为：$size"
