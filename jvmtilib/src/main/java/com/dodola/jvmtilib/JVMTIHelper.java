@@ -64,6 +64,8 @@ public class JVMTIHelper {
 
     public static native long getObjectSize(Object obj);
 
+    public static native int redefineClass(Class targetClass,byte[] dexBytes);
+
 
     public static void printEnter(String log) {
         Log.d("JVMTIHelper", "_____________________" + log);

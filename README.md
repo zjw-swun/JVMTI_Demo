@@ -11,6 +11,7 @@
 3. JNI Method Rebind
 4. Class Retransform
 5. getObjectSize
+6. RedefineClasses (实现android studio 3.5的apply change功能)
 
 注意：例子最好在9.0上测试，支持模拟器，8.0下修改 Class 功能无效
 

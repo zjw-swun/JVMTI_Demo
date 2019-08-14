@@ -217,7 +217,7 @@ void ObjectAllocCallback(jvmtiEnv *jvmti, JNIEnv *jni,
     jmethodID mid_getName = jni->GetMethodID(cls, "getName", "()Ljava/lang/String;");
     jstring name = static_cast<jstring>(jni->CallObjectMethod(klass, mid_getName));
     const char *className = jni->GetStringUTFChars(name, JNI_FALSE);
-   // ALOGI("==========alloc callback======= %s {size:%d}", className, size);
+    // ALOGI("==========alloc callback======= %s {size:%d}", className, size);
     jni->ReleaseStringUTFChars(name, className);
 }
 
@@ -277,13 +277,31 @@ extern "C" JNIEXPORT void JNICALL retransformClasses(JNIEnv *env,
         env->ReleaseStringUTFChars(name, className);
     }
 
-
     jvmtiError error = localJvmtiEnv->RetransformClasses(class_count_ptr, classes_ptr);
 
     for (int i = 0; i < numTransformedClasses; i++) {
         env->DeleteGlobalRef(transformedClasses[i]);
     }
     free(transformedClasses);
+}
+
+extern "C" JNIEXPORT jint JNICALL redefineClass(JNIEnv *env, jclass clazz, jclass target, jbyteArray dex_bytes) {
+    ALOGI("==========redefineClass =======");
+    jvmtiClassDefinition def;
+    def.klass = target;
+    def.class_byte_count = static_cast<jint>(env->GetArrayLength(dex_bytes));
+
+    signed char *redef_bytes = env->GetByteArrayElements(dex_bytes, nullptr);
+    jvmtiError res = localJvmtiEnv->Allocate(def.class_byte_count,
+                                             const_cast<unsigned char **>(&def.class_bytes));
+    if (res != JVMTI_ERROR_NONE) {
+        return static_cast<jint>(res);
+    }
+    memcpy(const_cast<unsigned char *>(def.class_bytes), redef_bytes, def.class_byte_count);
+    env->ReleaseByteArrayElements(dex_bytes, redef_bytes, 0);
+    // Do the redefinition.
+    res = localJvmtiEnv->RedefineClasses(1, &def);
+    return static_cast<jint>(res);
 }
 
 extern "C" JNIEXPORT jlong JNICALL getObjectSize(JNIEnv *env, jclass clazz, jobject obj) {
@@ -297,6 +315,8 @@ extern "C" JNIEXPORT jlong JNICALL getObjectSize(JNIEnv *env, jclass clazz, jobj
         localJvmtiEnv->Deallocate(reinterpret_cast<unsigned char *>(err));
         return -1;
     }
+
+
     return size;
 }
 
@@ -306,6 +326,7 @@ JvmTINativeMethodBind(jvmtiEnv *jvmti_env, JNIEnv *jni_env, jthread thread, jmet
     jclass clazz = jni_env->FindClass("com/dodola/jvmtilib/JVMTIHelper");
     jmethodID methodid = jni_env->GetStaticMethodID(clazz, "retransformClasses", "([Ljava/lang/Class;)V");
     jmethodID methodid2 = jni_env->GetStaticMethodID(clazz, "getObjectSize", "(Ljava/lang/Object;)J");
+    jmethodID methodid3 = jni_env->GetStaticMethodID(clazz, "redefineClass", "(Ljava/lang/Class;[B)I");
     if (methodid == method) {
         *new_address_ptr = reinterpret_cast<void *>(&retransformClasses);
     }
@@ -314,6 +335,9 @@ JvmTINativeMethodBind(jvmtiEnv *jvmti_env, JNIEnv *jni_env, jthread thread, jmet
         *new_address_ptr = reinterpret_cast<jlong *>(&getObjectSize);
     }
 
+    if (methodid3 == method) {
+        *new_address_ptr = reinterpret_cast<jlong *>(&redefineClass);
+    }
     //绑定 package code 到BootClassLoader 里
     jfieldID packageCodePathId = jni_env->GetStaticFieldID(clazz, "packageCodePath",
                                                            "Ljava/lang/String;");
@@ -344,7 +368,7 @@ extern "C" JNIEXPORT jint JNICALL Agent_OnAttach(JavaVM *vm, char *options, void
 
     callbacks.GarbageCollectionStart = &GCStartCallback;
     callbacks.GarbageCollectionFinish = &GCFinishCallback;
-    // callbacks.MethodEntry = &MethoddEntry;
+    //callbacks.MethodEntry = &MethoddEntry;
     int error = jvmti_env->SetEventCallbacks(&callbacks, sizeof(callbacks));
 
     SetEventNotification(jvmti_env, JVMTI_ENABLE,
@@ -371,6 +395,11 @@ extern "C" JNIEXPORT void JNICALL tempRetransformClasses(JNIEnv *env,
                                                          jobjectArray classes) {
 }
 
+extern "C" JNIEXPORT jint JNICALL tempRedefineClasses(JNIEnv *env,
+                                                      jclass clazz,
+                                                      jclass target,
+                                                      jbyteArray dex_bytes) {
+}
 
 extern "C" JNIEXPORT jlong JNICALL tempGetObjectSize(JNIEnv *env,
                                                      jclass clazz,
@@ -380,6 +409,7 @@ extern "C" JNIEXPORT jlong JNICALL tempGetObjectSize(JNIEnv *env,
 
 static JNINativeMethod methods[] = {
         {"getObjectSize",      "(Ljava/lang/Object;)J", reinterpret_cast<jlong *>(tempGetObjectSize)},
+        {"redefineClass",      "(Ljava/lang/Class;[B)I",                 reinterpret_cast<jint *>(tempRedefineClasses)},
         {"retransformClasses", "([Ljava/lang/Class;)V", reinterpret_cast<void *>(tempRetransformClasses)}
 };
 

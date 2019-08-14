@@ -5,11 +5,9 @@ package com.dodola.jvmti
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
-import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
-import android.os.Environment
 import com.dodola.jvmtilib.JVMTIHelper
 import kotlinx.android.synthetic.main.activity_main.*
 import java.lang.reflect.Modifier
@@ -17,7 +15,9 @@ import java.util.*
 import dalvik.system.DexClassLoader
 import permission.IPermissionSuccess
 import permission.PermissionManager.grantPermission
-import java.io.File.separator
+import java.io.ByteArrayOutputStream
+import java.io.InputStream
+import java.lang.Exception
 
 
 class MainActivity : Activity() {
@@ -51,13 +51,15 @@ class MainActivity : Activity() {
             System.runFinalization()
         }
         button_modify_class.setOnClickListener {
-            // retransformClasses：对于已经加载的类重新进行转换处理，即会触发重新加载类定义，
+            // redefineClass：对于已经加载的类重新进行转换处理，即会触发重新加载类定义，
             // 需要注意的是，新加载的类不能修改旧有的类声明，譬如不能增加属性、不能修改方法声明
             Test().log()
-            HotFix.copyDexFileToAppAndFix(this@MainActivity, "out.dex", true)
-            //Test类前插！
+            // HotFix.copyDexFileToAppAndFix(this@MainActivity, "out.dex", true)
+
             JVMTIHelper.init(this@MainActivity)
-            JVMTIHelper.retransformClasses(arrayOf(Test::class.java))
+            //dexbyte
+            val dexbyte = getBytes(assets.open("out.dex"))
+            JVMTIHelper.redefineClass(Test::class.java, dexbyte)
             Test().log()
         }
         button_start_activity.setOnClickListener {
@@ -83,44 +85,29 @@ class MainActivity : Activity() {
             //对象头的大小是8个字节
             getObjectSizeBt.text = "对象大小为：$size"
         }
-
-       // loadDexClass(this)
     }
 
-
-    /**
-     * 使用DexClassLoader方式加载类
-     */
-    fun loadDexClass(context: Context) {
-        // dex压缩文件的路径（可以是apk,jar,zip格式）
-        val dexPath = Environment.getExternalStorageDirectory().toString() + separator + SHOWSTRINGCLASS
-
-        // dex解压释放后的目录
-        val dexOutputDirs = Environment.getExternalStorageDirectory().toString()
-
-        //指定dexoutputpath为APP自己的缓存目录
-        val dexOutputDir = context.getDir(DEX, 0)
-
-        // 定义DexClassLoader
-        // 第一个参数：是dex压缩文件的路径
-        // 第二个参数：是dex解压缩后存放的目录
-        // 第三个参数：是C/C++依赖的本地库文件目录,可以为null
-        // 第四个参数：是上一级的类加载器
-        //dexClassLoader dexClassLoader = new dexClassLoader(dexPath,dexOutputDirs,null,getClassLoader());
-        dexClassLoader = DexClassLoader(dexPath, dexOutputDir.absolutePath, null, null)
-
-        // 使用DexClassLoader加载类
+    //将文件转换成Byte数组
+    fun getBytes(input: InputStream): ByteArray? {
+        val outputStream = ByteArrayOutputStream()
         try {
-            libProvierClazz = dexClassLoader.loadClass(SHOWSTRINGCLASS_PATH)
-            // 创建dynamic实例
-            var mShowStringClass = libProvierClazz!!.newInstance() // as Test
-            // mShowStringClass.log()
+            val buffer = ByteArray(1024 * 4)
+            var n = 0
+            while (-1 != n) {
+                n = input.read(buffer)
+                if (-1 != n) {
+                    outputStream.write(buffer, 0, n)
+                }
+            }
+            return outputStream.toByteArray()
         } catch (e: Exception) {
             e.printStackTrace()
+        } finally {
+            input.close()
+            outputStream.close()
         }
-
+        return null
     }
-
 
     /**
      * Calculates full size of object iterating over
