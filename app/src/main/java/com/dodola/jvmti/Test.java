@@ -1,5 +1,7 @@
 package com.dodola.jvmti;
 
+import android.util.Log;
+
 /**
  * Desc :
  * date : 2019/8/6 1:59
@@ -15,4 +17,8 @@ public class Test {
     //long money = 1000L;
    // float age = 17.5f;
    // double age = 18.0;
+
+    public void log(){
+        Log.e("TAG","Test");
+    }
 }

@@ -19,7 +19,6 @@ using namespace lir;
 #define ALOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 static jvmtiEnv *localJvmtiEnv;
 
-
 // Add a label before instructionAfter
 static void
 addLabel(CodeIr &c,
@@ -218,9 +217,10 @@ void ObjectAllocCallback(jvmtiEnv *jvmti, JNIEnv *jni,
     jmethodID mid_getName = jni->GetMethodID(cls, "getName", "()Ljava/lang/String;");
     jstring name = static_cast<jstring>(jni->CallObjectMethod(klass, mid_getName));
     const char *className = jni->GetStringUTFChars(name, JNI_FALSE);
-    ALOGI("==========alloc callback======= %s {size:%d}", className, size);
+   // ALOGI("==========alloc callback======= %s {size:%d}", className, size);
     jni->ReleaseStringUTFChars(name, className);
 }
+
 
 void GCStartCallback(jvmtiEnv *jvmti) {
     ALOGI("==========触发 GCStart=======");
@@ -231,6 +231,21 @@ void GCFinishCallback(jvmtiEnv *jvmti) {
     ALOGI("==========触发 GCFinish=======");
 
 }
+
+void MethoddEntry(jvmtiEnv *jvmti_env, JNIEnv *jni_env, jthread thread, jmethodID method) {
+    char *name = NULL;
+    char *signature = NULL;
+    char *generic = NULL;
+    jvmtiError result;
+
+    jvmtiThreadInfo tinfo;
+    jvmti_env->GetThreadInfo(thread, &tinfo);
+    ALOGI("==========触发 MethoddEntry  线程名%s=======", tinfo.name);
+
+    jvmti_env->GetMethodName(method, &name, &signature, &generic);
+    ALOGI("==========触发 MethoddEntry  方法名%s %s=======", name, signature);
+}
+
 
 void SetEventNotification(jvmtiEnv *jvmti, jvmtiEventMode mode,
                           jvmtiEvent event_type) {
@@ -248,8 +263,22 @@ extern "C" JNIEXPORT void JNICALL retransformClasses(JNIEnv *env,
     }
     ALOGI("==============retransformClasses ===============");
 
-    jvmtiError error = localJvmtiEnv->RetransformClasses(numTransformedClasses,
-                                                         transformedClasses);
+    jint class_count_ptr;
+    jclass *classes_ptr;
+    localJvmtiEnv->GetLoadedClasses(&class_count_ptr, &classes_ptr);
+    ALOGI("==========retransformClasses class_count_ptr======= %d", class_count_ptr);
+    //获取class name
+    for (int i = 0; i < class_count_ptr; i++) {
+        jclass cls = env->FindClass("java/lang/Class");
+        jmethodID mid_getName = env->GetMethodID(cls, "getName", "()Ljava/lang/String;");
+        jstring name = static_cast<jstring>(env->CallObjectMethod(*(classes_ptr + i), mid_getName));
+        const char *className = env->GetStringUTFChars(name, JNI_FALSE);
+        ALOGI("==========retransformClasses name======= %s", className);
+        env->ReleaseStringUTFChars(name, className);
+    }
+
+
+    jvmtiError error = localJvmtiEnv->RetransformClasses(class_count_ptr, classes_ptr);
 
     for (int i = 0; i < numTransformedClasses; i++) {
         env->DeleteGlobalRef(transformedClasses[i]);
@@ -274,7 +303,6 @@ extern "C" JNIEXPORT jlong JNICALL getObjectSize(JNIEnv *env, jclass clazz, jobj
 void JNICALL
 JvmTINativeMethodBind(jvmtiEnv *jvmti_env, JNIEnv *jni_env, jthread thread, jmethodID method, void *address, void **new_address_ptr) {
     ALOGI("===========NativeMethodBind===============");
-
     jclass clazz = jni_env->FindClass("com/dodola/jvmtilib/JVMTIHelper");
     jmethodID methodid = jni_env->GetStaticMethodID(clazz, "retransformClasses", "([Ljava/lang/Class;)V");
     jmethodID methodid2 = jni_env->GetStaticMethodID(clazz, "getObjectSize", "(Ljava/lang/Object;)J");
@@ -316,6 +344,7 @@ extern "C" JNIEXPORT jint JNICALL Agent_OnAttach(JavaVM *vm, char *options, void
 
     callbacks.GarbageCollectionStart = &GCStartCallback;
     callbacks.GarbageCollectionFinish = &GCFinishCallback;
+    // callbacks.MethodEntry = &MethoddEntry;
     int error = jvmti_env->SetEventCallbacks(&callbacks, sizeof(callbacks));
 
     SetEventNotification(jvmti_env, JVMTI_ENABLE,
@@ -330,6 +359,8 @@ extern "C" JNIEXPORT jint JNICALL Agent_OnAttach(JavaVM *vm, char *options, void
                          JVMTI_EVENT_OBJECT_FREE);
     SetEventNotification(jvmti_env, JVMTI_ENABLE,
                          JVMTI_EVENT_CLASS_FILE_LOAD_HOOK);
+    SetEventNotification(jvmti_env, JVMTI_ENABLE,
+                         JVMTI_EVENT_METHOD_ENTRY);
     ALOGI("==========Agent_OnAttach=======");
     return JNI_OK;
 
@@ -354,6 +385,7 @@ static JNINativeMethod methods[] = {
 
 JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved) {
     JNIEnv *env;
+
     if (vm->GetEnv((void **) &env, JNI_VERSION_1_6) != JNI_OK) {
         return JNI_ERR;
     }
