@@ -5,7 +5,13 @@ buildscript {
 
     
     repositories {
+        //阿里云镜像
         google()
+        repositories {
+            maven{ url 'http://maven.aliyun.com/nexus/content/groups/public/' }
+            maven{ url 'http://maven.aliyun.com/nexus/content/repositories/jcenter'}
+        }
+
         jcenter()
     }
     dependencies {
@@ -19,7 +25,13 @@ buildscript {
 
 allprojects {
     repositories {
+        //阿里云镜像
         google()
+        repositories {
+            maven{ url 'http://maven.aliyun.com/nexus/content/groups/public/'}
+            maven{ url 'http://maven.aliyun.com/nexus/content/repositories/jcenter'}
+        }
+
         jcenter()
     }
 }
