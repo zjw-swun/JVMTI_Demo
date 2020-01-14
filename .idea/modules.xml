@@ -2,6 +2,9 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
+      <module fileurl="file://$PROJECT_DIR$/JVMTI_Demo.iml" filepath="$PROJECT_DIR$/JVMTI_Demo.iml" />
+      <module fileurl="file://$PROJECT_DIR$/app/JVMTI_Demo-app.iml" filepath="$PROJECT_DIR$/app/JVMTI_Demo-app.iml" />
+      <module fileurl="file://$PROJECT_DIR$/jvmtilib/JVMTI_Demo-jvmtilib.iml" filepath="$PROJECT_DIR$/jvmtilib/JVMTI_Demo-jvmtilib.iml" />
       <module fileurl="file://$PROJECT_DIR$/.idea/JVMTI_Sample.iml" filepath="$PROJECT_DIR$/.idea/JVMTI_Sample.iml" />
       <module fileurl="file://$PROJECT_DIR$/app/app.iml" filepath="$PROJECT_DIR$/app/app.iml" />
       <module fileurl="file://$PROJECT_DIR$/jvmtilib/jvmtilib.iml" filepath="$PROJECT_DIR$/jvmtilib/jvmtilib.iml" />

@@ -17,6 +17,10 @@ using namespace lir;
 #define ALOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
 #define ALOGW(...) __android_log_print(ANDROID_LOG_WARN, LOG_TAG, __VA_ARGS__)
 #define ALOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
+
+#define SEP_POWER "^^^"
+#define SEP_COMMA ",,,"
+
 static jvmtiEnv *localJvmtiEnv;
 
 // Add a label before instructionAfter
@@ -210,6 +214,72 @@ jvmtiEnv *CreateJvmtiEnv(JavaVM *vm) {
 
 }
 
+/**
+ * 根据线程和指定深度获取调用栈，不包含方法参数签名，示例：
+ * Lcom/demo/android/app/ui/fragment/BaseFragment;^^^onCreate,,,Lcom/demo/android/app/ui/fragment/SupportSystemBarFragment;^^^onCreate,,,Lcom/demo/android/app/market/fragment/MarketFragment;^^^onCreate
+ * @param jvmti
+ * @param env
+ * @param thread
+ * @param stackDepth
+ * @return
+ */
+char *createStackInfo(jvmtiEnv *jvmti, JNIEnv *env, jthread thread, int stackDepth) {
+    char *result = nullptr;
+    jvmtiFrameInfo frames[stackDepth];
+    jint count;
+    jvmtiError err;
+
+    err = jvmti->GetStackTrace(thread, 0, stackDepth, frames, &count);
+    if (err != JVMTI_ERROR_NONE) {
+        ALOGE("[JVMTI ERROR on GetStackTrace]: %i", err);
+        return result;
+    }
+    if (count <= 0) {
+        return result;
+    }
+    for (int i = 0; i < count; i++) {
+        jvmtiFrameInfo info = frames[i];
+        char *classSignature;
+        char *methodName;
+        //获取方法签名
+        err = jvmti->GetMethodName(info.method, &methodName, nullptr, nullptr);
+        if (err != JVMTI_ERROR_NONE) {
+            ALOGE("[JVMTI ERROR on GetMethodName]:%i", err);
+            break;
+        }
+        //获取方法所在类
+        jclass declaringClass;
+        err = jvmti->GetMethodDeclaringClass(info.method, &declaringClass);
+        if (err != JVMTI_ERROR_NONE) {
+            ALOGE("[JVMTI ERROR on GetMethodDeclaringClass]:%i", err);
+            break;
+        }
+        //获取方法所在类的签名
+        err = jvmti->GetClassSignature(declaringClass, &classSignature, nullptr);
+        if (err != JVMTI_ERROR_NONE) {
+            ALOGE("[JVMTI ERROR on GetClassSignature]:%i", err);
+            break;
+        }
+
+        //打印方法调用栈
+        ALOGI("%s%s \n",classSignature,methodName);
+        if (result == nullptr) {
+            asprintf(&result, "%s%s%s", classSignature, SEP_POWER, methodName);
+        } else {
+            char *stack;
+            asprintf(&stack, "%s%s%s%s%s",
+                     result, SEP_COMMA,
+                     classSignature, SEP_POWER,
+                     methodName);
+            free(result);
+            result = stack;
+        }
+        jvmti->Deallocate((unsigned char *) classSignature);
+        jvmti->Deallocate((unsigned char *) methodName);
+    }
+    return result;
+}
+
 void ObjectAllocCallback(jvmtiEnv *jvmti, JNIEnv *jni,
                          jthread thread, jobject object,
                          jclass klass, jlong size) {
@@ -217,7 +287,23 @@ void ObjectAllocCallback(jvmtiEnv *jvmti, JNIEnv *jni,
     jmethodID mid_getName = jni->GetMethodID(cls, "getName", "()Ljava/lang/String;");
     jstring name = static_cast<jstring>(jni->CallObjectMethod(klass, mid_getName));
     const char *className = jni->GetStringUTFChars(name, JNI_FALSE);
-    // ALOGI("==========alloc callback======= %s {size:%d}", className, size);
+
+    char *classSignature;
+    jvmti->GetClassSignature(klass, &classSignature, nullptr);
+
+    //todo 获取alloc时调用栈
+    std::string sClassName = className;
+    std::string regex = "Main2Activity";
+    std::string::size_type find;
+    find = sClassName.find(regex);
+    if (find == std::string::npos){
+
+    } else{
+        char *stackInfo = createStackInfo(jvmti, jni, thread, 10);
+        ALOGI("==========alloc callback sClassName ======= %s ", sClassName.data());
+        ALOGI("==========alloc callback======= %s {size:%d}", className, size);
+        ALOGI("----> classPrepare: %s, %s", classSignature, stackInfo);
+    }
     jni->ReleaseStringUTFChars(name, className);
 }
 
